@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Math check-up</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Literata:wght@400;600&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1A1F2B;--muted:#5B6475;--rule:#D9DEE8;--bg:#F4F6FA;--card:#fff;--blue:#1B3FA0;--amber:#B45309;--good:#17803D;--bad:#B42318}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Manrope,system-ui,sans-serif}
+main{max-width:720px;margin:0 auto;padding:24px 20px 80px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:28px}
+h1{font:600 28px/1.2 Literata,Georgia,serif;margin:0}
+.lang{display:flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--card);flex-shrink:0}
+.lang button{border:0;background:none;padding:8px 12px;font:600 14px Manrope,sans-serif;color:var(--muted);cursor:pointer}
+.lang button[aria-pressed=true]{background:var(--blue);color:#fff}
+button:focus-visible,textarea:focus-visible{outline:3px solid #8FA8F0;outline-offset:2px}
+.lead{font:400 18px/1.6 Literata,Georgia,serif;color:var(--muted);max-width:56ch}
+.primary{margin-top:20px;border:0;border-radius:6px;background:var(--blue);color:#fff;padding:13px 22px;font:700 16px Manrope,sans-serif;cursor:pointer}
+.primary:hover{background:#152f85}
+.status{padding:40px 0;color:var(--muted);font:400 18px Literata,Georgia,serif}
+.err{color:var(--bad);font-weight:600}
+.task{background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--rule);border-radius:6px;padding:18px 20px;margin-bottom:14px}
+.task.olympiad{border-left-color:var(--amber)}
+.meta{font-size:14px;font-weight:700;color:var(--muted);margin-bottom:6px}
+.olympiad .meta{color:var(--amber)}
+.q{font:400 18px/1.65 Literata,Georgia,serif;margin:0 0 12px}
+textarea{width:100%;min-height:90px;resize:vertical;border:1px solid var(--rule);border-radius:6px;padding:10px 12px;font:16px/1.5 Manrope,sans-serif;color:var(--ink)}
+.given{white-space:pre-wrap;background:var(--bg);border-radius:6px;padding:10px 12px;margin:0 0 10px}
+.fb{margin:8px 0 0}.fb b{font-weight:700}
+.pts{font-weight:700}.pts.good{color:var(--good)}.pts.bad{color:var(--bad)}
+.score{background:var(--blue);color:#fff;border-radius:6px;padding:22px 24px;margin-bottom:20px}
+.score .n{font:600 56px/1 Literata,Georgia,serif}.score .of{font-size:18px;opacity:.85;margin-left:8px}
+.score .l{margin:0 0 6px;font-weight:600;opacity:.9}
+</style>
+</head>
+<body>
+<main>
+  <header><h1></h1><div class="lang" id="langs"></div></header>
+  <div id="app"></div>
+</main>
+<script>
+const T={
+en:{title:'Math check-up',sub:'Ten new tasks every time: algebra and geometry, finishing with two olympiad problems. Submit your answers and get a score out of 100.',start:'Start new test',submit:'Submit answers',gen:'Creating your tasks…',translating:'Translating…',checking:'Checking your answers…',ph:'Your answer and working',alg:'Algebra',geo:'Geometry',olym:'Olympiad',score:'Your score',of:'out of 100',correct:'Correct answer',again:'Try a new test',err:'Something went wrong. Please try again.',pts:'points',yours:'Your answer',blank:'(no answer)'},
+ru:{title:'Проверка по математике',sub:'Каждый раз десять новых заданий: алгебра и геометрия, в конце два олимпиадных. Отправьте ответы и получите оценку по 100-балльной шкале.',start:'Начать новый тест',submit:'Отправить ответы',gen:'Создаём задания…',translating:'Переводим…',checking:'Проверяем ответы…',ph:'Ваш ответ и решение',alg:'Алгебра',geo:'Геометрия',olym:'Олимпиада',score:'Ваш результат',of:'из 100',correct:'Правильный ответ',again:'Пройти новый тест',err:'Что-то пошло не так. Попробуйте ещё раз.',pts:'баллов',yours:'Ваш ответ',blank:'(нет ответа)'},
+kk:{title:'Математикадан тексеру',sub:'Әр жолы 10 жаңа тапсырма: алгебра мен геометрия, соңында екі олимпиадалық есеп. Жауаптарыңызды жіберіп, 100 балдық бағаны алыңыз.',start:'Жаңа тест бастау',submit:'Жауаптарды жіберу',gen:'Тапсырмалар жасалуда…',translating:'Аударылуда…',checking:'Жауаптар тексерілуде…',ph:'Жауабыңыз және шешуіңіз',alg:'Алгебра',geo:'Геометрия',olym:'Олимпиада',score:'Нәтижеңіз',of:'100-ден',correct:'Дұрыс жауап',again:'Жаңа тест тапсыру',err:'Бір нәрсе дұрыс болмады. Қайта көріңіз.',pts:'балл',yours:'Сіздің жауабыңыз',blank:'(жауап жоқ)'}
+};
+let lang='en',tasks=null,sealed=null,tr={},answers=[],result=null,busy='',err=false;
+const $=s=>document.querySelector(s),t=k=>T[lang][k];
+const SUP={0:'⁰',1:'¹',2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷',8:'⁸',9:'⁹'};
+const fmt=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
+  .replace(/\^(\d)(?!\d)/g,(m,d)=>SUP[d]).replace(/sqrt\(/g,'√(').replace(/\bpi\b/g,'π').replace(/<=/g,'≤').replace(/>=/g,'≥').replace(/\n/g,'<br>');
+function post(body){return fetch('/api/quiz',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||'error');return d})}
+function saveAnswers(){document.querySelectorAll('textarea[data-i]').forEach(e=>answers[+e.dataset.i]=e.value)}
+
+function render(){
+  document.documentElement.lang=lang;
+  $('h1').textContent=t('title');
+  $('#langs').innerHTML=[['en','EN'],['ru','RU'],['kk','ҚАЗ']].map(([l,n])=>`<button data-l="${l}" aria-pressed="${l===lang}">${n}</button>`).join('');
+  const app=$('#app'),e=err?`<p class="err" role="alert">${t('err')}</p>`:'';
+  if(busy){app.innerHTML=`<p class="status" role="status">${t(busy)}</p>`;return}
+  if(!tasks){app.innerHTML=`<p class="lead">${t('sub')}</p>${e}<button class="primary" id="start">${t('start')}</button>`;return}
+  const list=tr[lang]||tr.en;
+  const head=result?`<div class="score"><p class="l">${t('score')}</p><span class="n">${result.total}</span><span class="of">${t('of')}</span></div>`:'';
+  const body=tasks.map((k,i)=>{
+    const q=list.find(x=>x.id===k.id)||k,r=result&&result.items[i];
+    const topic=t(k.topic==='geometry'?'geo':'alg'),olym=k.level==='olympiad';
+    const meta=`${i+1}. ${olym?t('olym')+' · ':''}${topic}`;
+    const mine=r?`<p class="meta">${t('yours')}</p><div class="given">${fmt(answers[i])||t('blank')}</div>
+      <p class="pts ${r.score>=7?'good':r.score<=3?'bad':''}">${r.score}/10 ${t('pts')}</p>
+      <p class="fb">${fmt(r.feedback)}</p><p class="fb"><b>${t('correct')}:</b> ${fmt(r.answer)}</p>`
+      :`<textarea data-i="${i}" placeholder="${t('ph')}">${(answers[i]||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</textarea>`;
+    return `<article class="task ${olym?'olympiad':''}"><div class="meta">${meta}</div><p class="q">${fmt(q.question)}</p>${mine}</article>`;
+  }).join('');
+  app.innerHTML=head+body+e+(result?`<button class="primary" id="again">${t('again')}</button>`:`<button class="primary" id="submit">${t('submit')}</button>`);
+}
+
+async function start(){
+  err=false;busy='gen';render();
+  try{const d=await post({action:'generate'});tasks=d.tasks;sealed=d.sealed;tr={en:tasks};answers=Array(10).fill('');result=null}
+  catch(x){err=true;tasks=null}
+  busy='';render();
+}
+async function setLang(l){
+  if(l===lang)return;
+  saveAnswers();const prev=lang;lang=l;err=false;
+  if(tasks&&!tr[l]){busy='translating';render();
+    try{tr[l]=(await post({action:'translate',lang:l,tasks:tr.en.map(({id,question})=>({id,question}))})).tasks}
+    catch(x){err=true;lang=prev}
+    busy=''}
+  render();
+}
+async function submit(){
+  saveAnswers();err=false;busy='checking';render();
+  try{result=await post({action:'check',sealed,lang,answers})}catch(x){err=true}
+  busy='';render();window.scrollTo(0,0);
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.l)setLang(b.dataset.l);
+  else if(b.id==='start')start();
+  else if(b.id==='submit')submit();
+  else if(b.id==='again'){tasks=null;result=null;sealed=null;tr={};answers=[];render()}
+});
+render();
+</script>
+</body>
+</html>
