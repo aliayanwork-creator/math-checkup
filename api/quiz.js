@@ -1,22 +1,28 @@
+
 const crypto = require('crypto');
-const MODEL = 'claude-sonnet-5-5';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const LANGS = { en: 'English', ru: 'Russian', kk: 'Kazakh' };
 const PLAIN = 'Reply with JSON only: no markdown, no code fences, no backslashes, no LaTeX, no dollar signs. Write math in plain text: x^2, sqrt(5), pi, a/b, <=, >=.';
-
+ 
 async function ask(system, user, max) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
+  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODEL, max_tokens: max, system, messages: [{ role: 'user', content: user }] })
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: { maxOutputTokens: max + 8000, responseMimeType: 'application/json' }
+    })
   });
   const d = await r.json();
   if (!r.ok) throw new Error((d.error && d.error.message) || 'AI error');
-  const text = d.content.map(c => c.text || '').join('');
+  const parts = (d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts) || [];
+  const text = parts.map(p => p.text || '').join('');
   return JSON.parse(text.match(/\{[\s\S]*\}/)[0]);
 }
-
+ 
 // Правильные ответы шифруются и едут к браузеру "в запечатанном виде", прочитать их может только сервер
-const key = () => crypto.createHash('sha256').update(process.env.ANTHROPIC_API_KEY).digest();
+const key = () => crypto.createHash('sha256').update(process.env.GEMINI_API_KEY).digest();
 function seal(o) {
   const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', key(), iv);
   const e = Buffer.concat([c.update(JSON.stringify(o), 'utf8'), c.final()]);
@@ -27,12 +33,12 @@ function unseal(s) {
   d.setAuthTag(b.subarray(12, 28));
   return JSON.parse(Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8'));
 }
-
+ 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   try {
     const b = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-
+ 
     if (b.action === 'generate') {
       const out = await ask(
         'You are an expert math teacher writing a school test. ' + PLAIN,
@@ -50,7 +56,7 @@ Each task needs one unambiguous final answer. Solve every task carefully and dou
         sealed: seal(tasks)
       });
     }
-
+ 
     if (b.action === 'translate') {
       if (!LANGS[b.lang] || b.lang === 'en') throw new Error('Bad language');
       const out = await ask(
@@ -58,7 +64,7 @@ Each task needs one unambiguous final answer. Solve every task carefully and dou
         `Translate the "question" of each task into ${LANGS[b.lang]}. Keep all numbers, letters, formulas and notation exactly as they are. Use correct school math terminology. Return {"tasks":[{"id":1,"question":""}]}.\n` + JSON.stringify(b.tasks), 5000);
       return res.json({ tasks: out.tasks });
     }
-
+ 
     if (b.action === 'check') {
       const tasks = unseal(b.sealed);
       const lang = LANGS[b.lang] || 'English';
@@ -80,9 +86,10 @@ Return {"items":[{"id":1,"score":0,"feedback":""}]}.\n` + JSON.stringify(payload
       });
       return res.json({ total: items.reduce((s, x) => s + x.score, 0), items });
     }
-
+ 
     res.status(400).json({ error: 'Unknown action' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 };
+ 
